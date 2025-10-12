@@ -42,3 +42,8 @@ Affichage clair des métriques dans une interface Swing.
 
 - **Sortie :**  
 Une visualisation interactive du graphe d’appel.
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f5406c62-94af-49f6-93ae-f6eeccd9ed47" />
+<img width="977" height="641" alt="image" src="https://github.com/user-attachments/assets/bdb65224-4095-4e4b-a950-8468818ad433" />
+
+

@@ -21,17 +21,17 @@ import java.util.List;
 public class AppGrapheMain {
 
     private static final Set<String> KEEP_CLASSES = Set.of(
-            "org.example.codebase.BoutiqueService",
-            "org.example.codebase.Produit",
-            "org.example.codebase.ProduitElectronique",
-            "org.example.codebase.Vendable"
+            "org.analysis.codesource.BoutiqueService",
+            "org.analysis.codesource.Produit",
+            "org.analysis.codesource.ProduitElectronique",
+            "org.analysis.codesource.Vendable"
     );
 
     public static void main(String[] args) {
         String root = args.length > 0 ? args[0] : "src/main/java";
         int x       = args.length > 1 ? Integer.parseInt(args[1]) : 3;
 
-        var res = AnalysisRunner.analyze(root, x, "org.example.codebase");
+        var res = AnalysisRunner.analyze(root, x, "org.analysis.codesource");
         Map<String, Set<String>> full = res.stats().callGraph.asMap();
         Map<String, Set<String>> sub  = subgraphOfClasses(full, KEEP_CLASSES);
 

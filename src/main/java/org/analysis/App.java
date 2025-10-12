@@ -22,7 +22,8 @@ public class App {
      */
     public static void main(String[] args) {
         try {
-            Path root = Path.of(args.length > 0 ? args[0] : "src/main/java/org/example/codebase");
+            Path root = Path.of(args.length > 0 ? args[0] : "src/main/java"); // au lieu de .../org/example/codebase
+
             int x = (args.length > 1) ? Integer.parseInt(args[1]) : 3;
 
             // 1) Lister les fichiers .java

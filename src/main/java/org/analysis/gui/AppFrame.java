@@ -10,9 +10,9 @@ import java.awt.event.ActionEvent;
 
 public class AppFrame extends JFrame {
 
-    private final JTextField tfRoot = new JTextField("src/main/java/org/example/codebase");
+    private final JTextField tfRoot = new JTextField("src/main/java/org/analysis");
     private final JTextField tfX = new JTextField("3");
-    private final JTextField tfPkg = new JTextField("org.example.codebase");
+    private final JTextField tfPkg = new JTextField("org.analysis.codesource");
     private final JButton btnParcourir = new JButton("Parcourir…");
     private final JButton btnAnalyser = new JButton("Analyser");
 
@@ -29,8 +29,7 @@ public class AppFrame extends JFrame {
             "10) Intersection des deux tops",
             "11) Classes avec > X méthodes",
             "12) Top 10% des méthodes (LOC) par classe",
-            "13) Nombre maximal de paramètres (global)",
-            "14) Graphe d'appel (liste d'adjacence)"
+            "13) Nombre maximal de paramètres (global)"
     };
     private final JComboBox<String> cbQuestion = new JComboBox<>(questions);
     private final JTextArea taResult = new JTextArea(16, 80);

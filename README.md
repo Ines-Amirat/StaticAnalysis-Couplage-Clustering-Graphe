@@ -80,3 +80,6 @@ Une visualisation interactive du graphe d’appel.
 
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f5406c62-94af-49f6-93ae-f6eeccd9ed47" />
 <img width="977" height="641" alt="image" src="https://github.com/user-attachments/assets/bdb65224-4095-4e4b-a950-8468818ad433" />
+<img width="700" height="838" alt="image" src="https://github.com/user-attachments/assets/2993e714-fbe1-4e8a-8471-9153fd151ac3" />
+<img width="1283" height="418" alt="image" src="https://github.com/user-attachments/assets/7023fd8c-9d6c-461b-a92e-f09cd0a113f6" />
+

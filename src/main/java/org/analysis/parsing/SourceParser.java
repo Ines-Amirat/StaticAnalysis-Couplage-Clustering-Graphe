@@ -62,7 +62,7 @@ public class SourceParser {
 
         // ✅ Options de compilation (Java 21 OK, ou ajuste si besoin)
         Map<String, String> options = JavaCore.getOptions();
-        JavaCore.setComplianceOptions(JavaCore.VERSION_21, options);
+        JavaCore.setComplianceOptions(JavaCore.VERSION_17, options);
         parser.setCompilerOptions(options);
 
         // ✅ Très important pour que JDT sache où résoudre les types/méthodes

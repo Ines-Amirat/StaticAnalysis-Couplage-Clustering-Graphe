@@ -2,32 +2,65 @@ package org.analysis.codesource;
 
 import java.math.BigDecimal;
 
-/** Sous-classe : règles simples spécifiques à l'électronique. */
+/**
+ * Produit électronique qui possède des attributs de type Produit.
+ * Appelle leurs méthodes (via attributs) pour enrichir le graphe d’appels.
+ */
 public class ProduitElectronique extends Produit {
-    private final int garantieMois;
 
-    public ProduitElectronique(String code, String nom, BigDecimal prixHT, int stock, int garantieMois) {
-        super(code, nom, "Électronique", prixHT, new BigDecimal("0.20"), stock);
-        this.garantieMois = Math.max(0, garantieMois);
-        log("Garantie: " + this.garantieMois + " mois");
+    /** Attributs pour créer des appels via composition */
+    private Produit accessoire;
+    private Produit batterieDeSecours;
+
+    public ProduitElectronique(String reference, String nom, BigDecimal prixHT, BigDecimal tva, int stock) {
+        super(reference, nom, prixHT, tva, stock);
     }
 
-    public int garantieMois() { return garantieMois; }
-
-    /** Cap la remise à 30% sur l’électronique, puis appelle la super-méthode. */
-    @Override
-    public void appliquerRemise(double pct) {
-        double limite = Math.min(pct, 0.30);
-        super.appliquerRemise(limite);
+    public void setAccessoire(Produit accessoire) {
+        this.accessoire = accessoire;
     }
 
-    /** Exemple : ajuster la TVA à 5.5% pour une promo éco (appelle super). */
-    public void activerTvaEco() {
-        setTva(new BigDecimal("0.055"));
+    public Produit getAccessoire() {
+        return accessoire;
     }
 
-    /** Petit résumé utilisé par le service (appel croisé). */
-    public String resume() {
-        return nom() + " [" + code() + "] " + garantieMois + " mois - TTC: " + prixTTC() + "€";
+    public void setBatterieDeSecours(Produit batterieDeSecours) {
+        this.batterieDeSecours = batterieDeSecours;
+    }
+
+    public Produit getBatterieDeSecours() {
+        return batterieDeSecours;
+    }
+
+    /** Appels multiples via attributs (this, accessoire, batterie, et même le complement hérité de Produit). */
+    public BigDecimal coutBundleTTC() {
+        BigDecimal total = this.prixTTC();                 // Produit(prixTTC) via héritage
+        if (accessoire != null) {
+            accessoire.appliquerRemise(0.05);              // via attribut
+            total = total.add(accessoire.prixTTC());       // via attribut
+            accessoire.retirerRemise();                    // via attribut
+        }
+        if (batterieDeSecours != null) {
+            batterieDeSecours.retirerDuStock(1);           // via attribut
+            total = total.add(batterieDeSecours.prixTTC()); // via attribut
+        }
+        // Appels via l'attribut complement hérité de Produit (si défini)
+        Produit complement = this.getComplement();
+        if (complement != null) {
+            complement.appliquerRemise(0.02);              // via attribut (hérité)
+            total = total.add(complement.prixTTC());       // via attribut (hérité)
+            complement.retirerRemise();                    // via attribut (hérité)
+        }
+        return total;
+    }
+
+    /** Réserve différents éléments liés via attributs. */
+    public void reserverAccessoiresEtBatterie() {
+        if (accessoire != null) {
+            accessoire.retirerDuStock(1);                  // via attribut
+        }
+        if (batterieDeSecours != null) {
+            batterieDeSecours.retirerDuStock(1);           // via attribut
+        }
     }
 }

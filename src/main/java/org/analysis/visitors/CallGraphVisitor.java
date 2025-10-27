@@ -1,95 +1,111 @@
 package org.analysis.visitors;
 
-import org.eclipse.jdt.core.dom.*;
 import org.analysis.processing.model.ProjectStats;
+import org.eclipse.jdt.core.dom.*;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Objects;
 
-/** Construit le graphe d'appel en gérant aussi les classes anonymes. */
+/** Construit le graphe d’appel INTER-CLASSES (callerClass != calleeClass). */
 public class CallGraphVisitor extends ASTVisitor {
+
     private final ProjectStats stats;
-    private final PackageVisitor pkgVisitor;
+    private final PackageVisitor pkg;
 
     private final Deque<String> classStack = new ArrayDeque<>();
     private final Deque<String> methodStack = new ArrayDeque<>();
 
-    public CallGraphVisitor(ProjectStats stats, PackageVisitor pkgVisitor) {
-        this.stats = stats;
-        this.pkgVisitor = pkgVisitor;
+    public CallGraphVisitor(ProjectStats stats, PackageVisitor pkg) {
+        this.stats = Objects.requireNonNull(stats);
+        this.pkg = Objects.requireNonNull(pkg);
     }
 
-    private String fq(String simpleClass){ return ProjectStats.fullName(pkgVisitor.currentPackage, simpleClass); }
-    private String curClass(){ return classStack.isEmpty() ? "" : classStack.peek(); }
-    private String curMethod(){ return methodStack.isEmpty() ? "" : methodStack.peek(); }
-    private static String sig(String fqCls, String m){ return (fqCls==null||fqCls.isBlank()) ? m : fqCls + "#" + m; }
+    private String curClass()  { return classStack.isEmpty() ? null : classStack.peek(); }
+    private String curMethod() { return methodStack.isEmpty() ? null : methodStack.peek(); }
+    private static String sig(String classFqn, String method) {
+        if (classFqn == null || method == null) return null;
+        return classFqn + "#" + method;
+    }
 
-    /* ==== Contexte classe/méthode ==== */
-
+    /* ----- Contexte classe/méthode ----- */
     @Override public boolean visit(TypeDeclaration node) {
-        classStack.push(fq(node.getName().getIdentifier()));
-        return true;
+        classStack.push(ProjectStats.fullName(pkg.currentPackage, node.getName().getIdentifier()));
+        return super.visit(node);
     }
-    @Override public void endVisit(TypeDeclaration node) { classStack.pop(); }
-
-    @Override public boolean visit(EnumDeclaration node) {
-        classStack.push(fq(node.getName().getIdentifier()));
-        return true;
+    @Override public void endVisit(TypeDeclaration node) {
+        if (!classStack.isEmpty()) classStack.pop();
     }
-    @Override public void endVisit(EnumDeclaration node) { classStack.pop(); }
-
-    @Override public boolean visit(AnonymousClassDeclaration node) {
-        // Nom synthétique basé sur le type instancié : new Foo() { ... } -> Foo$anon
-        String name = "Anonymous$anon";
-        ASTNode p = node.getParent();
-        if (p instanceof ClassInstanceCreation cic) name = cic.getType().toString() + "$anon";
-        classStack.push(fq(name));
-        return true;
-    }
-    @Override public void endVisit(AnonymousClassDeclaration node) { classStack.pop(); }
 
     @Override public boolean visit(MethodDeclaration node) {
         methodStack.push(node.getName().getIdentifier());
-        return true;
+        String me = sig(curClass(), curMethod());
+        if (me != null) stats.callGraph.addEdge(me, me); // crée le nœud
+        return super.visit(node);
     }
-    @Override public void endVisit(MethodDeclaration node) { methodStack.pop(); }
+    @Override public void endVisit(MethodDeclaration node) {
+        if (!methodStack.isEmpty()) methodStack.pop();
+    }
 
-    /* ==== Collecte des appels ==== */
-
+    /* ----- Appels "classiques" ----- */
     @Override public boolean visit(MethodInvocation node) {
         String caller = sig(curClass(), curMethod());
+        if (caller == null) return true;
 
-        // si qualifié (Foo.bar()) essayer de déduire la classe cible
-        String calleeOwner = curClass();
-        Expression expr = node.getExpression();
-        if (expr instanceof SimpleName sn) {
-            calleeOwner = fq(sn.getIdentifier());
-        } else if (expr instanceof ThisExpression) {
-            calleeOwner = curClass();
-        } // sinon, appel non qualifié: même classe
-
-        String callee = sig(calleeOwner, node.getName().getIdentifier());
-        stats.callGraph.addEdge(caller, callee);
-        return true;
+        IMethodBinding mb = node.resolveMethodBinding();
+        if (mb != null && mb.getDeclaringClass() != null) {
+            String calleeClass = mb.getDeclaringClass().getQualifiedName();
+            String callee = sig(calleeClass, mb.getName());
+            if (callee != null && calleeClass != null && !calleeClass.equals(curClass())) {
+                stats.callGraph.addEdge(caller, callee); // only inter-classes
+            }
+        }
+        return super.visit(node);
     }
 
     @Override public boolean visit(SuperMethodInvocation node) {
         String caller = sig(curClass(), curMethod());
-        String callee = sig(curClass(), node.getName().getIdentifier());
-        stats.callGraph.addEdge(caller, callee);
-        return true;
+        if (caller == null) return true;
+
+        IMethodBinding mb = node.resolveMethodBinding();
+        if (mb != null && mb.getDeclaringClass() != null) {
+            String calleeClass = mb.getDeclaringClass().getQualifiedName();
+            String callee = sig(calleeClass, mb.getName());
+            if (callee != null && !calleeClass.equals(curClass())) {
+                stats.callGraph.addEdge(caller, callee);
+            }
+        }
+        return super.visit(node);
     }
 
+    /* ----- Constructeurs ----- */
     @Override public boolean visit(ClassInstanceCreation node) {
         String caller = sig(curClass(), curMethod());
-        String callee = sig(fq(node.getType().toString()), "<init>");
-        stats.callGraph.addEdge(caller, callee);
-        return true;
+        if (caller == null) return super.visit(node);
+
+        IMethodBinding mb = node.resolveConstructorBinding();
+        if (mb != null && mb.getDeclaringClass() != null) {
+            String calleeClass = mb.getDeclaringClass().getQualifiedName();
+            String callee = sig(calleeClass, "<init>");
+            if (callee != null && !calleeClass.equals(curClass())) {
+                stats.callGraph.addEdge(caller, callee);
+            }
+        }
+        return super.visit(node);
     }
 
     @Override public boolean visit(ConstructorInvocation node) {
         String caller = sig(curClass(), curMethod());
-        stats.callGraph.addEdge(caller, sig(curClass(), "<init>"));
-        return true;
+        if (caller == null) return super.visit(node);
+
+        IMethodBinding mb = node.resolveConstructorBinding();
+        if (mb != null && mb.getDeclaringClass() != null) {
+            String calleeClass = mb.getDeclaringClass().getQualifiedName();
+            String callee = sig(calleeClass, "<init>");
+            if (callee != null && !calleeClass.equals(curClass())) {
+                stats.callGraph.addEdge(caller, callee);
+            }
+        }
+        return super.visit(node);
     }
 }

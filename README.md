@@ -43,7 +43,26 @@ Affichage clair des métriques dans une interface Swing.
 - **Sortie :**  
 Une visualisation interactive du graphe d’appel.
 
+### CouplingAppMain.java — Graphe de couplage entre classes
+- **Objectif :** Construire le graphe de couplage directionnel entre classes à partir du graphe d’appels.
+- **Exécution :** Depuis l’IDE : lancer org.analysis.CouplingAppMain
+
+- **Sortie :**
+  - Console : affiche T et chaque arête A->B : w=.. (c=..) triée.
+  - UI Swing (fenêtre) : 
+    - graphe pondéré 
+    - Nœuds = classes 
+    - Arêtes orientées avec épaisseur ∝ w et label w=… (c=…)
+
+### ModulesAppMain.java — Clustering hiérarchique & modules
+- **Objectif :** Regrouper les classes via un clustering hiérarchique agglomératif (average linkage) avec similarité
+- **Exécution :** Depuis l’IDE : lancer org.analysis.ModulesAppMain
+
+- **Sortie :**
+    - Console : liste des modules retenus avec leur taille et moyenne interne.
+    - UI Swing : dendrogramme horizontal (branches lissées, couleur par niveau, zoom/pan) + panneau “Modules extraits” à droite. 
+
+
+
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f5406c62-94af-49f6-93ae-f6eeccd9ed47" />
 <img width="977" height="641" alt="image" src="https://github.com/user-attachments/assets/bdb65224-4095-4e4b-a950-8468818ad433" />
-
-

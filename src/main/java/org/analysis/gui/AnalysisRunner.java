@@ -7,6 +7,8 @@ import org.analysis.processing.model.ProjectStats;
 
 import java.nio.file.Path;
 
+import static java.rmi.server.RemoteRef.packagePrefix;
+
 public class AnalysisRunner {
 
     public record AnalysisResult(StatisticsService.Answers answers, ProjectStats stats) {}
@@ -14,13 +16,21 @@ public class AnalysisRunner {
     public static AnalysisResult analyze(String rootDir, int xThreshold, String includePrefix) {
         Path root = Path.of((rootDir == null || rootDir.isBlank()) ? "src/main/java" : rootDir);
 
+        // (facultatif) tu peux garder cette ligne si tu l’utilises ailleurs
         var files = FileExplorer.listJavaFiles(root);
-        var parser = new SourceParser();
-        ProjectStats stats = (includePrefix == null || includePrefix.isBlank())
-                ? parser.parseFiles(files)
-                : parser.parseFilesFiltered(files, includePrefix);
+
+        SourceParser parser = new SourceParser();
+
+        ProjectStats stats;
+        try {
+            // ⚠️ passer le bon paramètre includePrefix (et non packagePrefix)
+            stats = parser.parseAll(root, includePrefix);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Échec d'analyse du dossier: " + root, e);
+        }
 
         var answers = new StatisticsService().compute(stats, xThreshold);
         return new AnalysisResult(answers, stats);
     }
+
 }

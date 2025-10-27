@@ -1,88 +1,100 @@
 package org.analysis.parsing;
 
+import org.analysis.processing.model.ProjectStats;
+import org.analysis.visitors.CallGraphVisitor;
+import org.analysis.visitors.ClassVisitor;
+import org.analysis.visitors.PackageVisitor;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.analysis.processing.model.ProjectStats;
-import org.analysis.visitors.*;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 public class SourceParser {
 
-    /** Analyse tous les fichiers fournis (sans filtre de package). */
-    public ProjectStats parseFiles(List<Path> javaFiles) {
+    /** Parcourt tout un dossier (avec filtre de package optionnel). */
+    public ProjectStats parseAll(Path root, String packagePrefix) throws IOException {
         ProjectStats stats = new ProjectStats();
-        for (Path f : javaFiles) {
-            String src = read(f);
-            stats.totalLOC += countLOC(src);
-
-            ASTParser parser = ASTParser.newParser(AST.JLS21);
-            parser.setSource(src.toCharArray());
-            parser.setKind(ASTParser.K_COMPILATION_UNIT);
-            parser.setCompilerOptions(JavaCore.getOptions());
-
-            CompilationUnit cu = (CompilationUnit) parser.createAST(null);
-
-            PackageVisitor pv = new PackageVisitor(stats);
-            cu.accept(pv);                                    // 1) package d'abord
-            cu.accept(new ClassVisitor(stats, pv));
-            cu.accept(new FieldVisitor(stats, pv));
-            cu.accept(new MethodVisitor(stats, pv));
-            cu.accept(new CallGraphVisitor(stats, pv));       // 2) graphe d’appel
-        }
-        return stats;
-    }
-
-    /** Analyse uniquement les unités dont le package matche un préfixe. */
-    public ProjectStats parseFilesFiltered(List<Path> javaFiles, String includePackagePrefix) {
-        ProjectStats stats = new ProjectStats();
-        String prefix = includePackagePrefix == null ? "" : includePackagePrefix.trim();
-
-        for (Path f : javaFiles) {
-            String src = read(f);
-
-            ASTParser parser = ASTParser.newParser(AST.JLS21);
-            parser.setSource(src.toCharArray());
-            parser.setKind(ASTParser.K_COMPILATION_UNIT);
-            parser.setCompilerOptions(JavaCore.getOptions());
-
-            CompilationUnit cu = (CompilationUnit) parser.createAST(null);
-
-            PackageVisitor pv = new PackageVisitor(stats);
-            cu.accept(pv);
-            String pkg = (pv.currentPackage == null) ? "" : pv.currentPackage;
-
-            if (!prefix.isEmpty() && !pkg.startsWith(prefix)) {
-                continue;
+        try (var stream = Files.walk(root)) {
+            for (Path p : (Iterable<Path>) stream.filter(f -> f.toString().endsWith(".java"))::iterator) {
+                parseOneFileInto(stats, root, p, packagePrefix);
             }
-
-            stats.totalLOC += countLOC(src);
-            cu.accept(new ClassVisitor(stats, pv));
-            cu.accept(new FieldVisitor(stats, pv));
-            cu.accept(new MethodVisitor(stats, pv));
-            cu.accept(new CallGraphVisitor(stats, pv));       // AJOUT dans filtered
         }
         return stats;
     }
 
-    /* ===== Helpers ===== */
-
-    private static String read(Path p) {
-        try { return Files.readString(p); }
-        catch (Exception e) { throw new RuntimeException(e); }
+    /** Compatibilité avec AnalysisRunner : liste précise de fichiers. */
+    public ProjectStats parseFiles(List<Path> javaFiles) throws IOException {
+        return parseFiles(javaFiles, null);
     }
 
-    /** Compte grossièrement les LOC non vides (ignore // commentaires). */
-    private static int countLOC(String src) {
-        int loc = 0;
-        for (String line : src.split("\\R")) {
-            String s = line.replaceAll("//.*", "").trim();
-            if (!s.isEmpty()) loc++;
+    public ProjectStats parseFiles(List<Path> javaFiles, String packagePrefix) throws IOException {
+        if (javaFiles == null || javaFiles.isEmpty()) return new ProjectStats();
+        // racine déduite du premier fichier
+        Path root = javaFiles.get(0).toAbsolutePath().getParent();
+        while (root != null && !root.getFileName().toString().equals("java")) {
+            root = root.getParent();
         }
-        return loc;
+        if (root == null) root = Path.of("src/main/java").toAbsolutePath();
+
+        ProjectStats stats = new ProjectStats();
+        for (Path p : javaFiles) {
+            if (p == null || !p.toString().endsWith(".java")) continue;
+            parseOneFileInto(stats, root, p, packagePrefix);
+        }
+        return stats;
+    }
+
+    /* -------------------- core -------------------- */
+
+    private void parseOneFileInto(ProjectStats stats, Path projectSourceRoot, Path file, String packagePrefix) throws IOException {
+        String src = Files.readString(file, StandardCharsets.UTF_8);
+
+        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.setSource(src.toCharArray());
+
+        // ✅ Options de compilation (Java 21 OK, ou ajuste si besoin)
+        Map<String, String> options = JavaCore.getOptions();
+        JavaCore.setComplianceOptions(JavaCore.VERSION_21, options);
+        parser.setCompilerOptions(options);
+
+        // ✅ Très important pour que JDT sache où résoudre les types/méthodes
+        //    - classpath minimal (vide ici)
+        //    - sourcepath = racine du code source (ex: .../src/main/java)
+        //    - encodings
+        //    - includeRunningVMBootclasspath = true (donc JRE/JDK courants visibles)
+        String[] classpathEntries = new String[] { /* vide => on résout au moins la JRE */ };
+        String[] sourcepathEntries = new String[] { projectSourceRoot.toAbsolutePath().toString() };
+        String[] encodings = new String[] { "UTF-8" };
+        parser.setEnvironment(classpathEntries, sourcepathEntries, encodings, /* includeRunningVMBootclasspath */ true);
+
+        // ✅ Un nom d'unité est requis quand on fournit un environment
+        parser.setUnitName(file.getFileName().toString());
+
+        // ✅ Activer bindings + recoveries
+        parser.setResolveBindings(true);
+        parser.setBindingsRecovery(true);
+        parser.setStatementsRecovery(true);
+
+        CompilationUnit cu = (CompilationUnit) parser.createAST(null);
+
+        // Filtrage package (si demandé)
+        var pkg = cu.getPackage();
+        String pkgName = (pkg == null || pkg.getName() == null) ? "" : pkg.getName().getFullyQualifiedName();
+        if (packagePrefix != null && !packagePrefix.isBlank() && !pkgName.startsWith(packagePrefix)) {
+            return;
+        }
+
+        PackageVisitor pv = new PackageVisitor(stats);
+        cu.accept(pv);
+        cu.accept(new ClassVisitor(stats, pv));
+        cu.accept(new CallGraphVisitor(stats, pv));
     }
 }
